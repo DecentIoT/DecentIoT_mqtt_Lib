@@ -5,7 +5,10 @@
 DecentIoTClass DecentIoT;
 DecentIoTClass &getDecentIoT() { return DecentIoT; }
 
-DecentIoTClass::DecentIoTClass() : _port(1883), _mqtt(_client), _useWebSocket(false)
+DecentIoTClass::DecentIoTClass() : _port(1883),
+                                   _useWebSocket(false),
+                                   _wsClient(nullptr),
+                                   _mqtt(512)
 {
 #ifdef ESP8266
     _cert = nullptr;
@@ -25,19 +28,21 @@ void DecentIoTClass::begin(const char *projectId, const char *userId, const char
 
     if (_port == 8884)
     {
-        // WebSocket over TLS
+        // WebSocket over TLS setup
         _useWebSocket = true;
+        _ws.beginSSL(_broker.c_str(), _port, "/mqtt");
 
-#ifdef ESP8266
-        if (_cert == nullptr)
+        if (_wsClient == nullptr)
         {
-            _cert = new BearSSL::X509List(root_ca);
-            _client.setTrustAnchors(_cert);
-            _client.setInsecure(); // For testing
+            _wsClient = new WebSocketClient(_ws);
         }
-#endif
 
-        _setupWebSocket();
+        _mqtt.begin(*_wsClient);
+        String clientId = "DecentIoT-" + String(random(0xffff), HEX);
+        _mqtt.connect(clientId.c_str(), _username.c_str(), _password.c_str());
+
+        _mqtt.onMessage([this](String &topic, String &payload)
+                        { this->_handleMessage(topic.c_str(), (const uint8_t *)payload.c_str(), payload.length()); });
     }
     else if (_port == 8883)
     {
@@ -53,17 +58,9 @@ void DecentIoTClass::begin(const char *projectId, const char *userId, const char
 #elif defined(ESP32)
         _client.setCACert(root_ca);
 #endif
-        _mqtt.setServer(_broker.c_str(), _port);
-        _mqtt.setCallback([this](char *topic, byte *payload, unsigned int length)
-                          { this->_handleMessage(topic, payload, length); });
-    }
-    else
-    {
-        // Standard MQTT (port 1883)
-        _useWebSocket = false;
-        _mqtt.setServer(_broker.c_str(), _port);
-        _mqtt.setCallback([this](char *topic, byte *payload, unsigned int length)
-                          { this->_handleMessage(topic, payload, length); });
+        _mqtt.begin(_client);
+        String clientId = "DecentIoT-" + String(random(0xffff), HEX);
+        _mqtt.connect(clientId.c_str(), _username.c_str(), _password.c_str());
     }
 }
 
@@ -86,7 +83,7 @@ String DecentIoTClass::_getTopic(const char *pin) const
     return _projectId + "/users/" + _userId + "/datastreams/" + _deviceId + "/" + pin;
 }
 
-void DecentIoTClass::_handleMessage(char *topic, byte *payload, unsigned int length)
+void DecentIoTClass::_handleMessage(const char *topic, const uint8_t *payload, unsigned int length)
 {
     String topicStr(topic);
     String pin = topicStr.substring(topicStr.lastIndexOf('/') + 1);
@@ -160,32 +157,10 @@ void DecentIoTClass::publishStatus(const char *status)
 
 void DecentIoTClass::run()
 {
-    if (!_mqtt.connected())
+    if (_useWebSocket)
     {
-        String clientId = "DecentIoT-" + String(random(0xffff), HEX);
-
-        // Add debug output
-        Serial.printf("Attempting to connect to MQTT broker: %s:%d\n", _broker.c_str(), _port);
-        Serial.printf("Username: %s, Password: %s\n", _username.c_str(), _password.c_str());
-
-        if (_mqtt.connect(clientId.c_str(), _username.c_str(), _password.c_str()))
-        {
-            Serial.println("Connected to MQTT broker");
-            // Resubscribe to all topics
-            for (auto &handler : _receiveHandlers)
-            {
-                String topic = _getTopic(handler.id.c_str());
-                _mqtt.subscribe(topic.c_str());
-            }
-        }
-        else
-        {
-            Serial.printf("Failed to connect to MQTT broker, state=%d, rc=%d\n",
-                          _mqtt.state(), _client.getLastSSLError());
-            delay(5000);
-        }
+        _ws.loop();
     }
-
     _mqtt.loop();
     processScheduledTasks();
 }
@@ -285,8 +260,8 @@ bool DecentIoTClass::isNumericString(const String &str)
 
 void DecentIoTClass::_setupWebSocket()
 {
-    _webSocket.onEvent([this](WStype_t type, uint8_t *payload, size_t length)
-                       { this->_webSocketEvent(type, payload, length); });
+    _ws.onEvent([this](WStype_t type, uint8_t *payload, size_t length)
+                { this->_webSocketEvent(type, payload, length); });
 
 #ifdef ESP8266
     if (_cert == nullptr)
@@ -348,6 +323,11 @@ void DecentIoTClass::_webSocketEvent(WStype_t type, uint8_t *payload, size_t len
 
 DecentIoTClass::~DecentIoTClass()
 {
+    if (_wsClient != nullptr)
+    {
+        delete _wsClient;
+        _wsClient = nullptr;
+    }
 #ifdef ESP8266
     if (_cert != nullptr)
     {

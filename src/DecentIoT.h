@@ -1,6 +1,9 @@
 #pragma once
 
 #include <Arduino.h>
+#include <vector>
+#include <map>
+#include <functional>
 
 // Platform-specific includes and declarations
 #ifdef ESP8266
@@ -14,11 +17,41 @@
 #include <WiFiClientSecure.h>
 #endif
 
-#include <PubSubClient.h>
 #include <WebSocketsClient.h>
-#include <vector>
-#include <functional>
-#include <map>
+#include <MQTT.h>
+
+// WebSocket client wrapper
+class WebSocketClient : public Client
+{
+private:
+    WebSocketsClient &_ws;
+    uint8_t _buffer[512];
+    size_t _offset = 0;
+    size_t _length = 0;
+
+public:
+    WebSocketClient(WebSocketsClient &ws) : _ws(ws) {}
+    int connect(IPAddress ip, uint16_t port) override { return 1; }
+    int connect(const char *host, uint16_t port) override { return 1; }
+    size_t write(uint8_t b) override
+    {
+        _ws.sendBIN(&b, 1);
+        return 1;
+    }
+    size_t write(const uint8_t *buf, size_t size) override
+    {
+        _ws.sendBIN(buf, size);
+        return size;
+    }
+    int available() override { return _length - _offset; }
+    int read() override { return -1; }
+    int read(uint8_t *buf, size_t size) override { return 0; }
+    int peek() override { return -1; }
+    void flush() override {}
+    void stop() override { _ws.disconnect(); }
+    uint8_t connected() override { return _ws.isConnected(); }
+    operator bool() override { return connected(); }
+};
 
 struct DecentIoTValue
 {
@@ -122,6 +155,7 @@ struct ScheduledTask
 class DecentIoTClass
 {
 private:
+    // Member variables - order matters for constructor
     String _projectId;
     String _userId;
     String _deviceId;
@@ -129,15 +163,15 @@ private:
     int _port;
     String _username;
     String _password;
-    WiFiClientSecure _client;
-    PubSubClient _mqtt;
-    WebSocketsClient _webSocket;
     bool _useWebSocket;
+    WiFiClientSecure _client;
+    WebSocketsClient _ws;
+    WebSocketClient *_wsClient;
+    MQTTClient _mqtt;
     std::vector<ReceiveHandler> _receiveHandlers;
     std::vector<SendHandler> _sendHandlers;
     std::map<String, ScheduledTask> _scheduledTasks;
 
-// Platform-specific certificate handling
 #ifdef ESP8266
     BearSSL::X509List *_cert;
 #endif
@@ -202,7 +236,7 @@ public:
 
 private:
     String _getTopic(const char *pin) const;
-    void _handleMessage(char *topic, byte *payload, unsigned int length);
+    void _handleMessage(const char *topic, const uint8_t *payload, unsigned int length);
     void _setupWebSocket();
     void _webSocketEvent(WStype_t type, uint8_t *payload, size_t length);
     void processScheduledTasks();
