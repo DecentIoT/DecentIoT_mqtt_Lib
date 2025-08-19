@@ -1,5 +1,8 @@
 #pragma once
 
+// Disable WebSocket debug output globally - MUST be before any includes
+#define NODEBUG_WEBSOCKETS
+
 #include <Arduino.h>
 #include <vector>
 #include <map>
@@ -19,6 +22,7 @@
 
 #include <WebSocketsClient.h>
 #include <MQTT.h>
+#include <PubSubClient.h>
 
 
 
@@ -135,7 +139,8 @@ private:
     bool _useWebSocket;
     WiFiClientSecure _client;
     WebSocketsClient _ws;
-    MQTTClient _mqtt;
+    MQTTClient _mqtt;  // For WebSocket (port 8884)
+    PubSubClient _pubsub;  // For TLS (port 8883)
     std::vector<ReceiveHandler> _receiveHandlers;
     std::vector<SendHandler> _sendHandlers;
     std::map<String, ScheduledTask> _scheduledTasks;
@@ -165,6 +170,7 @@ public:
     void schedule(String taskId, uint32_t interval, TaskCallback callback);
     void scheduleOnce(uint32_t delay, TaskCallback callback);
     void setCACert(const char *cert); // Add this line
+    void _subscribeAllPubSub();
 
 private:
     String _getTopic(const char *pin) const;

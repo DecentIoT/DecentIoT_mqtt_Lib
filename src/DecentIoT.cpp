@@ -1,3 +1,5 @@
+// Disable WebSocket debug output globally - MUST be before any includes
+#define NODEBUG_WEBSOCKETS
 #include "DecentIoT.h"
 #include <ArduinoJson.h>
 #include "mqtt_root_ca.h"
@@ -7,7 +9,8 @@ DecentIoTClass &getDecentIoT() { return DecentIoT; }
 
 DecentIoTClass::DecentIoTClass() : _port(1883),
                                    _useWebSocket(false),
-                                   _mqtt(512)
+                                   _mqtt(512),
+                                   _pubsub(_client)
 {
 #ifdef ESP8266
     _cert = nullptr;
@@ -34,11 +37,11 @@ void DecentIoTClass::begin(const char *projectId, const char *userId, const char
         // For WebSocket, we'll use the WebSocketsClient directly
         // The MQTT over WebSocket protocol will be handled manually
         String clientId = "DecentIoT-" + String(random(0xffff), HEX);
-        Serial.printf("WebSocket MQTT setup for client: %s\n", clientId.c_str());
+        Serial.printf("📡 MQTT WebSocket client: %s\n", clientId.c_str());
     }
     else if (_port == 8883)
     {
-        // Regular MQTT over TLS
+        // Regular MQTT over TLS using PubSubClient
         _useWebSocket = false;
 #ifdef ESP8266
         if (_cert == nullptr)
@@ -50,29 +53,38 @@ void DecentIoTClass::begin(const char *projectId, const char *userId, const char
 #elif defined(ESP32)
         _client.setCACert(root_ca);
 #endif
-        _mqtt.begin(_client);
+        
+        // Set up PubSubClient
+        _pubsub.setServer(_broker.c_str(), _port);
+        _pubsub.setCallback([this](char* topic, byte* payload, unsigned int length) {
+            _handleMessage(topic, payload, length);
+        });
+        
         String clientId = "DecentIoT-" + String(random(0xffff), HEX);
-        _mqtt.connect(clientId.c_str(), _username.c_str(), _password.c_str());
+        Serial.printf("📡 MQTT TLS client: %s\n", clientId.c_str());
+        
+        // Try to connect with proper error handling
+        Serial.println("🔗 Connecting to MQTT broker via TLS...");
+        
+        if (_pubsub.connect(clientId.c_str(), _username.c_str(), _password.c_str())) {
+            Serial.println("✅ MQTT TLS connection successful");
+            _subscribeAllPubSub();
+        } else {
+            Serial.println("❌ MQTT TLS connection failed");
+        }
     }
 }
 
 void DecentIoTClass::onReceive(const char *pin, ReceiveCallback callback)
 {
     _receiveHandlers.push_back({pin, callback});
-    // Subscribe to the topic for this pin
     String topic = _getTopic(pin);
-    if (_useWebSocket)
-    {
-        if (_ws.isConnected())
-        {
+    if (_useWebSocket) {
+        if (_ws.isConnected()) {
             _sendMQTTSubscribe(topic);
         }
-        // If not connected, subscription will be sent after connection
     }
-    else
-    {
-        _mqtt.subscribe(topic.c_str());
-    }
+    // For PubSubClient, subscribe after connection!
 }
 
 void DecentIoTClass::onSend(const char *pin, SendCallback callback)
@@ -138,12 +150,19 @@ void DecentIoTClass::write(const char *pin, bool value)
         }
         else
         {
-            Serial.println("WebSocket not connected, skipping message");
+            Serial.println("⚠️  MQTT not connected, skipping message");
         }
     }
     else
     {
-        _mqtt.publish(topic.c_str(), payload, true);
+        if (_pubsub.connected())
+        {
+            _pubsub.publish(topic.c_str(), payload, true);
+        }
+        else
+        {
+            Serial.println("⚠️  MQTT not connected, skipping message");
+        }
     }
 }
 void DecentIoTClass::write(const char *pin, int value)
@@ -159,12 +178,19 @@ void DecentIoTClass::write(const char *pin, int value)
         }
         else
         {
-            Serial.println("WebSocket not connected, skipping message");
+            Serial.println("⚠️  MQTT not connected, skipping message");
         }
     }
     else
     {
-        _mqtt.publish(topic.c_str(), buffer, true);
+        if (_pubsub.connected())
+        {
+            _pubsub.publish(topic.c_str(), buffer, true);
+        }
+        else
+        {
+            Serial.println("⚠️  MQTT not connected, skipping message");
+        }
     }
 }
 void DecentIoTClass::write(const char *pin, float value)
@@ -180,12 +206,19 @@ void DecentIoTClass::write(const char *pin, float value)
         }
         else
         {
-            Serial.println("WebSocket not connected, skipping message");
+            Serial.println("⚠️  MQTT not connected, skipping message");
         }
     }
     else
     {
-        _mqtt.publish(topic.c_str(), buffer, true);
+        if (_pubsub.connected())
+        {
+            _pubsub.publish(topic.c_str(), buffer, true);
+        }
+        else
+        {
+            Serial.println("⚠️  MQTT not connected, skipping message");
+        }
     }
 }
 void DecentIoTClass::write(const char *pin, const char *value)
@@ -199,12 +232,19 @@ void DecentIoTClass::write(const char *pin, const char *value)
         }
         else
         {
-            Serial.println("WebSocket not connected, skipping message");
+            Serial.println("⚠️  MQTT not connected, skipping message");
         }
     }
     else
     {
-        _mqtt.publish(topic.c_str(), value, true);
+        if (_pubsub.connected())
+        {
+            _pubsub.publish(topic.c_str(), value, true);
+        }
+        else
+        {
+            Serial.println("⚠️  MQTT not connected, skipping message");
+        }
     }
 }
 
@@ -219,12 +259,19 @@ void DecentIoTClass::publishStatus(const char *status)
         }
         else
         {
-            Serial.println("WebSocket not connected, skipping status");
+            Serial.println("⚠️  MQTT not connected, skipping status");
         }
     }
     else
     {
-        _mqtt.publish(topic.c_str(), status, true);
+        if (_pubsub.connected())
+        {
+            _pubsub.publish(topic.c_str(), status, true);
+        }
+        else
+        {
+            Serial.println("⚠️  MQTT not connected, skipping status");
+        }
     }
 }
 
@@ -236,7 +283,7 @@ void DecentIoTClass::run()
     }
     else
     {
-        _mqtt.loop();
+        _pubsub.loop();
     }
     processScheduledTasks();
 }
@@ -247,7 +294,7 @@ bool DecentIoTClass::connected()
     {
         return _ws.isConnected();
     }
-    return _mqtt.connected();
+    return _pubsub.connected();
 }
 void DecentIoTClass::disconnect()
 {
@@ -257,7 +304,7 @@ void DecentIoTClass::disconnect()
     }
     else
     {
-        _mqtt.disconnect();
+        _pubsub.disconnect();
     }
 }
 const char *DecentIoTClass::getStatus()
@@ -266,7 +313,7 @@ const char *DecentIoTClass::getStatus()
     {
         return _ws.isConnected() ? "connected" : "disconnected";
     }
-    return _mqtt.connected() ? "connected" : "disconnected";
+    return _pubsub.connected() ? "connected" : "disconnected";
 }
 const char *DecentIoTClass::getLastError()
 {
@@ -367,12 +414,12 @@ void DecentIoTClass::_setupWebSocket()
     const uint8_t *fingerprint = nullptr;
 
     // Set WebSocket options for better stability
-    _ws.setReconnectInterval(5000); // Reconnect every 5 seconds
     _ws.enableHeartbeat(15000, 3000, 2); // Heartbeat every 15s, timeout 3s, disconnect after 2 failures
+    _ws.setReconnectInterval(5000); // Reconnect every 5 seconds
 
     _ws.beginSSL(_broker.c_str(), _port, "/mqtt", fingerprint, wsProtocol.c_str());
 
-    Serial.printf("WebSocket connecting to wss://%s:%d/mqtt\n", _broker.c_str(), _port);
+    Serial.println("🔗 Connecting to MQTT broker via WebSocket...");
 }
 
 void DecentIoTClass::_webSocketEvent(WStype_t type, uint8_t *payload, size_t length)
@@ -380,10 +427,10 @@ void DecentIoTClass::_webSocketEvent(WStype_t type, uint8_t *payload, size_t len
     switch (type)
     {
     case WStype_DISCONNECTED:
-        Serial.println("WebSocket disconnected");
+        Serial.println("❌ MQTT connection lost");
         break;
     case WStype_CONNECTED:
-        Serial.println("WebSocket connected");
+        Serial.println("✅ MQTT connected via WebSocket");
         // Send MQTT CONNECT packet
         _sendMQTTConnect();
         break;
@@ -396,7 +443,7 @@ void DecentIoTClass::_webSocketEvent(WStype_t type, uint8_t *payload, size_t len
         _handleMQTTMessage(payload, length);
         break;
     case WStype_ERROR:
-        Serial.println("WebSocket error");
+        Serial.println("⚠️  MQTT connection error");
         break;
     case WStype_FRAGMENT_TEXT_START:
     case WStype_FRAGMENT_BIN_START:
@@ -438,21 +485,21 @@ void DecentIoTClass::_sendMQTTConnect()
     // Client ID
     packet[pos++] = (clientId.length() >> 8) & 0xFF;
     packet[pos++] = clientId.length() & 0xFF;
-    for (int i = 0; i < clientId.length(); i++) {
+    for (unsigned int i = 0; i < clientId.length(); i++) {
         packet[pos++] = clientId[i];
     }
     
     // Username
     packet[pos++] = (_username.length() >> 8) & 0xFF;
     packet[pos++] = _username.length() & 0xFF;
-    for (int i = 0; i < _username.length(); i++) {
+    for (unsigned int i = 0; i < _username.length(); i++) {
         packet[pos++] = _username[i];
     }
     
     // Password
     packet[pos++] = (_password.length() >> 8) & 0xFF;
     packet[pos++] = _password.length() & 0xFF;
-    for (int i = 0; i < _password.length(); i++) {
+    for (unsigned int i = 0; i < _password.length(); i++) {
         packet[pos++] = _password[i];
     }
     
@@ -461,7 +508,6 @@ void DecentIoTClass::_sendMQTTConnect()
     
     // Send the packet
     _ws.sendBIN(packet, pos);
-    Serial.println("MQTT CONNECT sent");
     
     // Subscribe to topics after connection
     delay(100); // Wait for CONNACK
@@ -484,12 +530,12 @@ void DecentIoTClass::_sendMQTTPublish(const String &topic, const String &payload
     // Variable header
     packet[pos++] = (topic.length() >> 8) & 0xFF;
     packet[pos++] = topic.length() & 0xFF;
-    for (int i = 0; i < topic.length(); i++) {
+    for (unsigned int i = 0; i < topic.length(); i++) {
         packet[pos++] = topic[i];
     }
     
     // Payload
-    for (int i = 0; i < payload.length(); i++) {
+    for (unsigned int i = 0; i < payload.length(); i++) {
         packet[pos++] = payload[i];
     }
     
@@ -516,7 +562,7 @@ void DecentIoTClass::_sendMQTTSubscribe(const String &topic)
     // Payload
     packet[pos++] = (topic.length() >> 8) & 0xFF;
     packet[pos++] = topic.length() & 0xFF;
-    for (int i = 0; i < topic.length(); i++) {
+    for (unsigned int i = 0; i < topic.length(); i++) {
         packet[pos++] = topic[i];
     }
     packet[pos++] = 0x00; // QoS
@@ -526,7 +572,6 @@ void DecentIoTClass::_sendMQTTSubscribe(const String &topic)
     
     // Send the packet
     _ws.sendBIN(packet, pos);
-    Serial.printf("MQTT SUBSCRIBE sent for: %s\n", topic.c_str());
 }
 
 void DecentIoTClass::_handleMQTTMessage(uint8_t *payload, size_t length)
@@ -537,16 +582,16 @@ void DecentIoTClass::_handleMQTTMessage(uint8_t *payload, size_t length)
     
     switch (packetType) {
         case 2: // CONNACK
-            Serial.println("MQTT CONNACK received");
+            Serial.println("✅ MQTT authentication successful");
             break;
         case 3: // PUBLISH
             _handleMQTTPublish(payload, length);
             break;
         case 9: // SUBACK
-            Serial.println("MQTT SUBACK received");
+            // Silent - subscription successful
             break;
         default:
-            Serial.printf("MQTT packet type %d received\n", packetType);
+            // Silent - ignore other packet types
             break;
     }
 }
@@ -569,11 +614,9 @@ void DecentIoTClass::_handleMQTTPublish(uint8_t *payload, size_t length)
     
     // Read payload
     String message = "";
-    for (int i = pos; i < length; i++) {
+    for (size_t i = pos; i < length; i++) {
         message += (char)payload[i];
     }
-    
-    Serial.printf("MQTT PUBLISH: %s = %s\n", topic.c_str(), message.c_str());
     
     // Handle the message
     String pin = topic.substring(topic.lastIndexOf('/') + 1);
@@ -589,4 +632,12 @@ DecentIoTClass::~DecentIoTClass()
         _cert = nullptr;
     }
 #endif
+}
+
+void DecentIoTClass::_subscribeAllPubSub()
+{
+    for (auto &handler : _receiveHandlers) {
+        String topic = _getTopic(handler.id.c_str());
+        _pubsub.subscribe(topic.c_str());
+    }
 }
