@@ -69,6 +69,7 @@ void DecentIoTClass::begin(const char *projectId, const char *userId, const char
         if (_pubsub.connect(clientId.c_str(), _username.c_str(), _password.c_str())) {
             Serial.println("✅ MQTT TLS connection successful");
             _subscribeAllPubSub();
+            _publishDeviceStatus(true); // true = online
         } else {
             Serial.println("❌ MQTT TLS connection failed");
         }
@@ -286,6 +287,11 @@ void DecentIoTClass::run()
         _pubsub.loop();
     }
     processScheduledTasks();
+    unsigned long now = millis();
+    if (now - _lastStatusUpdate > _statusUpdateInterval) {
+        _publishDeviceStatus(true); // true = online
+        _lastStatusUpdate = now;
+    }
 }
 
 bool DecentIoTClass::connected()
@@ -306,6 +312,7 @@ void DecentIoTClass::disconnect()
     {
         _pubsub.disconnect();
     }
+    _publishDeviceStatus(false);
 }
 const char *DecentIoTClass::getStatus()
 {
@@ -639,5 +646,20 @@ void DecentIoTClass::_subscribeAllPubSub()
     for (auto &handler : _receiveHandlers) {
         String topic = _getTopic(handler.id.c_str());
         _pubsub.subscribe(topic.c_str());
+    }
+}
+
+void DecentIoTClass::_publishDeviceStatus(bool online) {
+    String topic = _projectId + "/users/" + _userId + "/datastreams/" + _deviceId + "/status";
+    String payload = "{\"s\":" + String(online ? 1 : 0) + ",\"t\":" + String((unsigned long)time(nullptr)) + "}";
+    // Use retained message so broker always has latest status
+    if (_useWebSocket) {
+        if (_ws.isConnected()) {
+            _sendMQTTPublish(topic, payload); // You may want to add a retained flag if your wrapper supports it
+        }
+    } else {
+        if (_pubsub.connected()) {
+            _pubsub.publish(topic.c_str(), payload.c_str(), true); // true = retained
+        }
     }
 }

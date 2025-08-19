@@ -169,8 +169,8 @@ public:
     void schedule(uint32_t interval, TaskCallback callback);
     void schedule(String taskId, uint32_t interval, TaskCallback callback);
     void scheduleOnce(uint32_t delay, TaskCallback callback);
-    void setCACert(const char *cert); // Add this line
-    void _subscribeAllPubSub();
+    void setCACert(const char *cert); 
+    void _subscribeAllPubSub();   // this can/should be in under private
 
 private:
     String _getTopic(const char *pin) const;
@@ -184,7 +184,9 @@ private:
     void _handleMQTTPublish(uint8_t *payload, size_t length);
     void processScheduledTasks();
     bool isNumericString(const String &str);
-    // ...
+    unsigned long _lastStatusUpdate = 0;
+    const unsigned long _statusUpdateInterval = 30000; // 30 seconds
+    void _publishDeviceStatus(bool online);
 };
 
 extern DecentIoTClass DecentIoT;
