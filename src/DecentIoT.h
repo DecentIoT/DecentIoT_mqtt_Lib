@@ -1,6 +1,12 @@
 #pragma once
 
+// Disable WebSocket debug output globally - MUST be before any includes
+#define NODEBUG_WEBSOCKETS
+
 #include <Arduino.h>
+#include <vector>
+#include <map>
+#include <functional>
 
 // Platform-specific includes and declarations
 #ifdef ESP8266
@@ -14,11 +20,11 @@
 #include <WiFiClientSecure.h>
 #endif
 
-#include <PubSubClient.h>
 #include <WebSocketsClient.h>
-#include <vector>
-#include <functional>
-#include <map>
+#include <MQTT.h>
+#include <PubSubClient.h>
+
+
 
 struct DecentIoTValue
 {
@@ -122,6 +128,7 @@ struct ScheduledTask
 class DecentIoTClass
 {
 private:
+    // Member variables - order matters for constructor
     String _projectId;
     String _userId;
     String _deviceId;
@@ -129,20 +136,18 @@ private:
     int _port;
     String _username;
     String _password;
-    WiFiClientSecure _client;
-    PubSubClient _mqtt;
-    WebSocketsClient _webSocket;
     bool _useWebSocket;
+    WiFiClientSecure _client;
+    WebSocketsClient _ws;
+    MQTTClient _mqtt;  // For WebSocket (port 8884)
+    PubSubClient _pubsub;  // For TLS (port 8883)
     std::vector<ReceiveHandler> _receiveHandlers;
     std::vector<SendHandler> _sendHandlers;
     std::map<String, ScheduledTask> _scheduledTasks;
 
-// Platform-specific certificate handling
 #ifdef ESP8266
     BearSSL::X509List *_cert;
 #endif
-
-
 
 public:
     DecentIoTClass();
@@ -164,16 +169,24 @@ public:
     void schedule(uint32_t interval, TaskCallback callback);
     void schedule(String taskId, uint32_t interval, TaskCallback callback);
     void scheduleOnce(uint32_t delay, TaskCallback callback);
-    void setCACert(const char *cert); // Add this line
+    void setCACert(const char *cert); 
+    void _subscribeAllPubSub();   // this can/should be in under private
 
 private:
     String _getTopic(const char *pin) const;
-    void _handleMessage(char *topic, byte *payload, unsigned int length);
+    void _handleMessage(const char *topic, const uint8_t *payload, unsigned int length);
     void _setupWebSocket();
     void _webSocketEvent(WStype_t type, uint8_t *payload, size_t length);
+    void _sendMQTTConnect();
+    void _sendMQTTPublish(const String &topic, const String &payload);
+    void _sendMQTTSubscribe(const String &topic);
+    void _handleMQTTMessage(uint8_t *payload, size_t length);
+    void _handleMQTTPublish(uint8_t *payload, size_t length);
     void processScheduledTasks();
     bool isNumericString(const String &str);
-    // ...
+    unsigned long _lastStatusUpdate = 0;
+    const unsigned long _statusUpdateInterval = 30000; // 30 seconds
+    void _publishDeviceStatus(bool online);
 };
 
 extern DecentIoTClass DecentIoT;
