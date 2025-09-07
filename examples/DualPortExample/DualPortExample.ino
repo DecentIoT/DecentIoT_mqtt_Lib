@@ -18,17 +18,15 @@
 // Pin definitions
 const int LED_PIN = 2;
 
-// Connection type selection
-// Uncomment ONE of these to test different connection types:
+// MQTT over SSL/TLS (port 8883) - the only supported connection type
 #define USE_PORT_8883  // MQTT over SSL/TLS
-// #define USE_PORT_8884  // MQTT over WebSocket Secure
 
 void setup() {
     Serial.begin(115200);
     pinMode(LED_PIN, OUTPUT);
     
-    Serial.println("DecentIoT Dual Port Example");
-    Serial.println("============================");
+    Serial.println("DecentIoT MQTT TLS Example");
+    Serial.println("===========================");
     
     // Connect to WiFi
     Serial.println("Connecting to WiFi...");
@@ -41,28 +39,15 @@ void setup() {
     Serial.print("IP address: ");
     Serial.println(WiFi.localIP());
     
-    // Select connection type
-    int mqttPort;
-    String connectionType;
-    
-    #ifdef USE_PORT_8883
-        mqttPort = 8883;
-        connectionType = "MQTT over SSL/TLS";
-        Serial.println("Using port 8883: MQTT over SSL/TLS");
-    #elif defined(USE_PORT_8884)
-        mqttPort = 8884;
-        connectionType = "MQTT over WebSocket Secure";
-        Serial.println("Using port 8884: MQTT over WebSocket Secure");
-    #else
-        mqttPort = 8883; // Default to SSL/TLS
-        connectionType = "MQTT over SSL/TLS (default)";
-        Serial.println("Using port 8883: MQTT over SSL/TLS (default)");
-    #endif
+    // MQTT over SSL/TLS connection
+    int mqttPort = 8883;
+    String connectionType = "MQTT over SSL/TLS";
+    Serial.println("Using port 8883: MQTT over SSL/TLS");
     
     Serial.printf("Connection type: %s\n", connectionType.c_str());
     Serial.printf("Broker: %s:%d\n", MQTT_BROKER, mqttPort);
     
-    // Initialize DecentIoT with selected port
+    // Initialize DecentIoT with SSL/TLS
     DecentIoT.begin(PROJECT_ID, USER_ID, DEVICE_ID, 
                    MQTT_BROKER, mqttPort, MQTT_USERNAME, MQTT_PASSWORD);
     

@@ -1,8 +1,5 @@
 #pragma once
 
-// Disable WebSocket debug output globally - MUST be before any includes
-#define NODEBUG_WEBSOCKETS
-
 #include <Arduino.h>
 #include <vector>
 #include <map>
@@ -20,8 +17,6 @@
 #include <WiFiClientSecure.h>
 #endif
 
-#include <WebSocketsClient.h>
-#include <MQTT.h>
 #include <PubSubClient.h>
 
 
@@ -136,10 +131,7 @@ private:
     int _port;
     String _username;
     String _password;
-    bool _useWebSocket;
     WiFiClientSecure _client;
-    WebSocketsClient _ws;
-    MQTTClient _mqtt;  // For WebSocket (port 8884)
     PubSubClient _pubsub;  // For TLS (port 8883)
     std::vector<ReceiveHandler> _receiveHandlers;
     std::vector<SendHandler> _sendHandlers;
@@ -175,13 +167,6 @@ public:
 private:
     String _getTopic(const char *pin) const;
     void _handleMessage(const char *topic, const uint8_t *payload, unsigned int length);
-    void _setupWebSocket();
-    void _webSocketEvent(WStype_t type, uint8_t *payload, size_t length);
-    void _sendMQTTConnect();
-    void _sendMQTTPublish(const String &topic, const String &payload);
-    void _sendMQTTSubscribe(const String &topic);
-    void _handleMQTTMessage(uint8_t *payload, size_t length);
-    void _handleMQTTPublish(uint8_t *payload, size_t length);
     void processScheduledTasks();
     bool isNumericString(const String &str);
     unsigned long _lastStatusUpdate = 0;

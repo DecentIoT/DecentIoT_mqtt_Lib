@@ -5,7 +5,7 @@ A secure and powerful MQTT library for IoT devices with built-in SSL/TLS certifi
 ## Features
 
 - 🔒 **Built-in SSL/TLS Security** - Automatic certificate validation for secure connections
-- 🌐 **Dual Port Support** - MQTT over SSL/TLS (8883) and WebSocket Secure (8884)
+- 🔒 **SSL/TLS Support** - MQTT over SSL/TLS (port 8883)
 - 📡 **Real-time Communication** - Bi-directional data exchange
 - 🛠️ **Type-Safe Callbacks** - Automatic data type conversion
 - 📊 **JSON Support** - Built-in JSON parsing and creation
@@ -15,7 +15,7 @@ A secure and powerful MQTT library for IoT devices with built-in SSL/TLS certifi
 
 ## How It Works
 
-1. Connect to your MQTT broker with SSL/TLS (port 8883) or WebSocket Secure (port 8884)
+1. Connect to your MQTT broker with SSL/TLS (port 8883)
 2. Register callbacks for incoming messages
 3. Send data to specific topics
 4. The library handles all security and connection management
@@ -31,7 +31,7 @@ A secure and powerful MQTT library for IoT devices with built-in SSL/TLS certifi
 
 🔒 **SSL/TLS Certificate Validation**: The library includes a Let's Encrypt root certificate that automatically validates MQTT broker certificates.
 
-🔒 **Dual Port Support**: Supports both MQTT over SSL/TLS (port 8883) and WebSocket Secure (port 8884).
+🔒 **SSL/TLS Support**: Supports MQTT over SSL/TLS (port 8883) for secure IoT device communication.
 
 🔒 **No Certificate Bypass**: Unlike some libraries, DecentIoT enforces certificate validation - security cannot be disabled.
 
@@ -154,11 +154,10 @@ This project is licensed under the MIT License - see the LICENSE file for detail
 
 ## Acknowledgments
 
-- Inspired by the simplicity of Blynk
 - Built for the IoT community
 - Special thanks to all contributors
 
 ---
 
-Made with ❤️ by the OpenIoT Team
+
 
