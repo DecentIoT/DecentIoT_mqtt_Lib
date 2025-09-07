@@ -19,92 +19,99 @@
 const int LED_PIN = 2;
 const int TEMP_SENSOR = 36; // ADC1_CH0 on ESP32
 
-void setup() {
-    Serial.begin(115200);
-    pinMode(LED_PIN, OUTPUT);
-    
-    Serial.println("DecentIoT Secure MQTT Example");
-    Serial.println("Connecting to WiFi...");
-    
-    // Connect to WiFi
+// LED state handler
+DECENTIOT_RECEIVE(P0)
+{
+  digitalWrite(ledPin, value);
+  Serial.printf("[P0] LED state = %s\n", value ? "ON" : "OFF");
+}
+
+DECENTIOT_SEND(P1, 15000)
+{
+  // Generate random temperature value between 0-100
+  int temperature = random(0, 101);
+  DecentIoT.write(P1, temperature);
+  Serial.printf("[P1] Temperature = %d\n", temperature);
+}
+
+DECENTIOT_SEND(P2, 15000)
+{
+  // Generate random humidity value between 0-100
+  int humidity = random(0, 101);
+  DecentIoT.write(P2, humidity);
+  Serial.printf("[P2] Humidity = %d\n", humidity);
+}
+
+DECENTIOT_RECEIVE(P3)
+{
+  int sliderValue = value;
+  int pwmValue = sliderValue * 255 / 100;
+  analogWrite(rgbPin, pwmValue);
+  Serial.printf("[P3] RGB Brightness = %d (slider: %d)\n", pwmValue, sliderValue);
+}
+
+// Sending a message from device to cloud
+DECENTIOT_SEND(P4, 10000)
+{
+  static int count = 0;
+  String message = "ESP8266 Connected! Count: " + String(count++);
+  DecentIoT.write(P4, message.c_str());
+  Serial.println("[P4] Sent: " + message);
+}
+
+void setup()
+{
+  Serial.begin(115200);
+  Serial.println("\n--- Initializing DecentIoT Device ---");
+
+  // Initialize LED pin
+  pinMode(ledPin, OUTPUT);
+  pinMode(rgbPin, OUTPUT);
+  pinMode(LED_BUILTIN, OUTPUT);
+  digitalWrite(ledPin, LOW); // Ensure LED is off initially
+  digitalWrite(LED_BUILTIN, LOW);
+
+  // User handles WiFi connection
+  WiFi.begin(WIFI_SSID, WIFI_PASS);
+  while (WiFi.status() != WL_CONNECTED)
+  {
+    delay(500);
+    Serial.print(".");
+    digitalWrite(LED_BUILTIN, !digitalRead(LED_BUILTIN));
+  }
+  Serial.println("WiFi connected!");
+  digitalWrite(LED_BUILTIN, HIGH);
+
+  // Now start DecentIoT (cloud connection)
+  DecentIoT.begin(MQTT_BROKER, MQTT_PORT, MQTT_USERNAME, MQTT_PASSWORD, PROJECT_ID, USER_ID, DEVICE_ID);
+}
+
+void loop()
+{
+  // User checks WiFi and reconnects if needed
+  if (WiFi.status() != WL_CONNECTED)
+  {
+    digitalWrite(LED_BUILTIN, LOW);
+    Serial.println("[WiFi] Disconnected! Reconnecting...");
+    WiFi.disconnect();
     WiFi.begin(WIFI_SSID, WIFI_PASS);
-    while (WiFi.status() != WL_CONNECTED) {
-        delay(500);
-        Serial.print(".");
+    // Optionally: wait for connection, show status, etc.
+    int attempts = 0;
+    while (WiFi.status() != WL_CONNECTED && attempts < 20)
+    {
+      delay(500);
+      Serial.print(".");
+      digitalWrite(LED_BUILTIN, !digitalRead(LED_BUILTIN));
+      attempts++;
     }
-    Serial.println("\nWiFi connected!");
-    Serial.print("IP address: ");
-    Serial.println(WiFi.localIP());
-    
-    // Initialize DecentIoT with SSL/TLS
-    // The root certificate is automatically used when port 8883 is specified
-    DecentIoT.begin(PROJECT_ID, USER_ID, DEVICE_ID, MQTT_BROKER, MQTT_PORT, MQTT_USERNAME, MQTT_PASSWORD);
-    
-    Serial.println("Connecting to MQTT broker with SSL/TLS...");
-    
-    // Wait for MQTT connection
-    while (!DecentIoT.connected()) {
-        Serial.print(".");
-        delay(1000);
+    if (WiFi.status() == WL_CONNECTED)
+    {
+      Serial.println("WiFi reconnected! Restarting device...");
+      delay(1000);
+      ESP.restart();
     }
-    Serial.println("\nConnected to MQTT broker!");
-    
-    // Register handlers for incoming messages
-    DecentIoT.onReceive("led", [](const DecentIoTValue& value) {
-        bool ledState = value; // Automatic conversion
-        digitalWrite(LED_PIN, ledState);
-        Serial.printf("LED set to: %s\n", ledState ? "ON" : "OFF");
-    });
-    
-    DecentIoT.onReceive("brightness", [](const DecentIoTValue& value) {
-        int brightness = value; // Automatic conversion
-        analogWrite(LED_PIN, brightness);
-        Serial.printf("LED brightness set to: %d\n", brightness);
-    });
-    
-    // Register handlers for sending data
-    DecentIoT.onSend("temperature", []() {
-        float temp = readTemperature();
-        DecentIoT.write("temperature", temp);
-        Serial.printf("Temperature sent: %.2f°C\n", temp);
-    });
-    
-    DecentIoT.onSend("humidity", []() {
-        float humidity = readHumidity();
-        DecentIoT.write("humidity", humidity);
-        Serial.printf("Humidity sent: %.1f%%\n", humidity);
-    });
-    
-    // Publish initial status
-    DecentIoT.publishStatus("online");
-    Serial.println("Device is online and ready!");
-}
+  }
 
-void loop() {
-    // Handle MQTT operations
-    DecentIoT.run();
-    
-    // Send sensor data every 30 seconds
-    static unsigned long lastSend = 0;
-    if (millis() - lastSend > 30000) {
-        DecentIoT.write("temperature", readTemperature());
-        DecentIoT.write("humidity", readHumidity());
-        lastSend = millis();
-    }
-    
-    delay(100);
-}
-
-// Helper function to read temperature (simulated)
-float readTemperature() {
-    // Simulate temperature reading
-    // Replace with your actual sensor code
-    return 25.0 + random(-5, 5) + (random(0, 100) / 100.0);
-}
-
-// Helper function to read humidity (simulated)
-float readHumidity() {
-    // Simulate humidity reading
-    // Replace with your actual sensor code
-    return 60.0 + random(-10, 10) + (random(0, 100) / 100.0);
+  DecentIoT.run();
+  delay(10);
 }
