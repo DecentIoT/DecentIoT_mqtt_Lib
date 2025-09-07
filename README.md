@@ -97,18 +97,6 @@ float readTemperature() {
 }
 ```
 
-## Component Paths
-
-When you add components in the OpenIoT Dashboard, each component gets a unique path:
-
-| Component Type | Example Path | Description |
-|---------------|--------------|-------------|
-| Toggle Button | `/projects/myProject/components/led_toggle_123` | Control an LED |
-| Slider | `/projects/myProject/components/brightness_slider_456` | Control brightness |
-| Gauge | `/projects/myProject/components/temp_gauge_789` | Display sensor data |
-| Graph | `/projects/myProject/components/humidity_graph_012` | Show data history |
-
-Use these exact paths in your code to ensure proper communication between your device and dashboard.
 
 ## Detailed Usage
 
@@ -126,75 +114,6 @@ OpenIoT.begin(FIREBASE_URL, FIREBASE_AUTH, WIFI_SSID, WIFI_PASS, config);
 ```
 
 ### Path Callbacks
-
-```cpp
-// Digital output example
-FIREBASE_PATH("/devices/mydevice/led") {
-    bool value = param.asBool();
-    digitalWrite(LED_PIN, value);
-}
-
-// Analog output example
-FIREBASE_PATH("/devices/mydevice/brightness") {
-    int value = param.asInt();
-    analogWrite(LED_PIN, value);
-}
-
-// JSON object example
-FIREBASE_PATH("/devices/mydevice/rgb") {
-    int r = param["red"].asInt();
-    int g = param["green"].asInt();
-    int b = param["blue"].asInt();
-    setRGBColor(r, g, b);
-}
-```
-
-### Writing Data
-
-```cpp
-// Write single values
-OpenIoT.write("/sensors/temperature", 25.5);
-OpenIoT.write("/status/online", true);
-
-// Write JSON objects
-JsonObject data = OpenIoT.createObject();
-data["temp"] = 25.5;
-data["humidity"] = 60;
-data["timestamp"] = time(nullptr);
-OpenIoT.write("/sensors", data);
-```
-
-### Reading Data
-
-```cpp
-// Read single values
-float temp = OpenIoT.read<float>("/sensors/temperature");
-bool isOn = OpenIoT.read<bool>("/status/online");
-
-// Read JSON objects
-JsonObject data = OpenIoT.read("/sensors");
-float temp = data["temp"].asFloat();
-int humidity = data["humidity"].asInt();
-```
-
-## Firebase Setup
-
-1. Create a Firebase project at [Firebase Console](https://console.firebase.google.com/)
-2. Enable Realtime Database
-3. Set up security rules for your database
-4. Get your Firebase project credentials:
-   - Database URL
-   - Authentication token
-
-Example security rules for testing:
-```json
-{
-  "rules": {
-    ".read": true,
-    ".write": true
-  }
-}
-```
 
 ## Examples
 

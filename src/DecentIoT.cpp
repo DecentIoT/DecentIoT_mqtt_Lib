@@ -3,6 +3,7 @@
 #include "DecentIoT.h"
 #include <ArduinoJson.h>
 #include "mqtt_root_ca.h"
+#include <time.h>  // Add this for time functions
 
 DecentIoTClass DecentIoT;
 DecentIoTClass &getDecentIoT() { return DecentIoT; }
@@ -28,6 +29,24 @@ void DecentIoTClass::begin(const char *projectId, const char *userId, const char
     _username = mqttUser;
     _password = mqttPass;
 
+    // Sync time with NTP server (same as Firebase library)
+    configTime(0, 0, "pool.ntp.org", "time.nist.gov");
+    Serial.println("[DecentIoT] Waiting for NTP time sync...");
+    time_t now = 0;
+    int retry = 0;
+    while (now < 24 * 3600 && retry < 10) {
+        Serial.print(".");
+        delay(500);
+        now = time(nullptr);
+        retry++;
+    }
+    Serial.println();
+    if (now > 24 * 3600) {
+        Serial.printf("[DecentIoT] Time synced: %s", ctime(&now));
+    } else {
+        Serial.println("[DecentIoT] Failed to sync time");
+    }
+
     if (_port == 8884)
     {
         // WebSocket over TLS setup
@@ -37,7 +56,7 @@ void DecentIoTClass::begin(const char *projectId, const char *userId, const char
         // For WebSocket, we'll use the WebSocketsClient directly
         // The MQTT over WebSocket protocol will be handled manually
         String clientId = "DecentIoT-" + String(random(0xffff), HEX);
-        Serial.printf("📡 MQTT WebSocket client: %s\n", clientId.c_str());
+        //Serial.printf("📡 MQTT WebSocket client: %s\n", clientId.c_str());
     }
     else if (_port == 8883)
     {
@@ -61,7 +80,7 @@ void DecentIoTClass::begin(const char *projectId, const char *userId, const char
         });
         
         String clientId = "DecentIoT-" + String(random(0xffff), HEX);
-        Serial.printf("📡 MQTT TLS client: %s\n", clientId.c_str());
+        //Serial.printf("📡 MQTT TLS client: %s\n", clientId.c_str());
         
         // Try to connect with proper error handling
         Serial.println("🔗 Connecting to MQTT broker via TLS...");
@@ -651,15 +670,23 @@ void DecentIoTClass::_subscribeAllPubSub()
 
 void DecentIoTClass::_publishDeviceStatus(bool online) {
     String topic = _projectId + "/users/" + _userId + "/datastreams/" + _deviceId + "/status";
-    String payload = "{\"s\":" + String(online ? 1 : 0) + ",\"t\":" + String((unsigned long)time(nullptr)) + "}";
+    
+    // Use proper time sync like Firebase library
+    time_t unixTimestamp = time(nullptr);
+    String payload = "{\"s\":" + String(online ? 1 : 0) + ",\"t\":" + String((unsigned long)unixTimestamp) + "}";
+    
     // Use retained message so broker always has latest status
     if (_useWebSocket) {
         if (_ws.isConnected()) {
-            _sendMQTTPublish(topic, payload); // You may want to add a retained flag if your wrapper supports it
+            _sendMQTTPublish(topic, payload);
+            // Serial.printf("[STATUS] Device status updated: s=%d, t=%lu (%s)\n", 
+            //              online ? 1 : 0, (unsigned long)unixTimestamp, ctime(&unixTimestamp));
         }
     } else {
         if (_pubsub.connected()) {
             _pubsub.publish(topic.c_str(), payload.c_str(), true); // true = retained
+            // Serial.printf("[STATUS] Device status updated: s=%d, t=%lu (%s)\n", 
+            //              online ? 1 : 0, (unsigned long)unixTimestamp, ctime(&unixTimestamp));
         }
     }
 }
