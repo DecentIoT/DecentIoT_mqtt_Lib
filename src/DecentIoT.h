@@ -152,7 +152,7 @@ private:
 public:
     DecentIoTClass();
     ~DecentIoTClass(); // Add this line
-    void begin(const char *projectId, const char *userId, const char *deviceId, const char *mqttBroker, int mqttPort, const char *mqttUser = "", const char *mqttPass = "");
+    void begin(const char *mqttBroker, int mqttPort, const char *mqttUser, const char *mqttPass, const char *projectId, const char *userId, const char *deviceId);
     void onReceive(const char *pin, ReceiveCallback callback);
     void onSend(const char *pin, SendCallback callback);
     void run();

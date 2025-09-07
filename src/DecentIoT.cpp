@@ -18,8 +18,8 @@ DecentIoTClass::DecentIoTClass() : _port(1883),
 #endif
 }
 
-void DecentIoTClass::begin(const char *projectId, const char *userId, const char *deviceId,
-                           const char *mqttBroker, int mqttPort, const char *mqttUser, const char *mqttPass)
+void DecentIoTClass::begin(const char *mqttBroker, int mqttPort, const char *mqttUser, const char *mqttPass,
+                           const char *projectId, const char *userId, const char *deviceId)
 {
     _projectId = projectId;
     _userId = userId;
@@ -609,6 +609,7 @@ void DecentIoTClass::_handleMQTTMessage(uint8_t *payload, size_t length)
     switch (packetType) {
         case 2: // CONNACK
             Serial.println("✅ MQTT authentication successful");
+            _publishDeviceStatus(true);
             break;
         case 3: // PUBLISH
             _handleMQTTPublish(payload, length);
