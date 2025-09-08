@@ -1,3 +1,20 @@
+/*
+  DecentIoT MQTT Library
+  Copyright 2025 MD Jannatul Nayem
+  
+  Licensed under the Apache License, Version 2.0 (the "License");
+  you may not use this file except in compliance with the License.
+  You may obtain a copy of the License at
+  
+      http://www.apache.org/licenses/LICENSE-2.0
+  
+  Unless required by applicable law or agreed to in writing, software
+  distributed under the License is distributed on an "AS IS" BASIS,
+  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+  See the License for the specific language governing permissions and
+  limitations under the License.
+*/
+
 #include "DecentIoT.h"
 #include <ArduinoJson.h>
 #include "mqtt_root_ca.h"
@@ -242,21 +259,25 @@ void DecentIoTClass::schedule(uint32_t interval, TaskCallback callback)
 
 void DecentIoTClass::schedule(String taskId, uint32_t interval, TaskCallback callback)
 {
-    ScheduledTask task;
-    task.lastRun = 0;
-    task.interval = interval;
-    task.callback = callback;
-    _scheduledTasks[taskId] = task;
+    _scheduledTasks[taskId] = {0, interval, callback};
 }
 
 void DecentIoTClass::scheduleOnce(uint32_t delay, TaskCallback callback)
 {
     String taskId = "once_" + String(millis());
-    ScheduledTask task;
-    task.lastRun = millis();
-    task.interval = delay;
-    task.callback = callback;
-    _scheduledTasks[taskId] = task;
+    _scheduledTasks[taskId] = {millis(), delay, callback};
+}
+
+void DecentIoTClass::cancel(String taskId)
+{
+    _scheduledTasks.erase(taskId);
+}
+
+void DecentIoTClass::cancelSend(const char *pin)
+{
+    // Cancel any scheduled send tasks for this pin
+    String taskId = String("send_") + pin;
+    _scheduledTasks.erase(taskId);
 }
 
 void DecentIoTClass::processScheduledTasks()
@@ -303,12 +324,6 @@ bool DecentIoTClass::isNumericString(const String &str)
     }
     return true;
 }
-
-
-
-
-
-
 
 
 DecentIoTClass::~DecentIoTClass()

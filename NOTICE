@@ -1,0 +1,27 @@
+DecentIoT MQTT Library
+Copyright 2025 MD Jannatul Nayem
+
+This product includes software developed by third parties:
+
+1. PubSubClient Library
+   Copyright (c) 2008-2015 Nicholas O'Leary
+   Licensed under the MIT License
+   https://github.com/knolleary/pubsubclient
+
+2. ArduinoJson Library
+   Copyright (c) 2014-2021 Benoit Blanchon
+   Licensed under the MIT License
+   https://github.com/bblanchon/ArduinoJson
+
+3. ESP8266/ESP32 WiFi Libraries
+   Copyright (c) 2014-2021 Espressif Systems
+   Licensed under the GNU Lesser General Public License v2.1
+   https://github.com/espressif/arduino-esp32
+
+4. Let's Encrypt Root Certificate
+   Copyright (c) 2015-2021 Internet Security Research Group
+   Licensed under the Mozilla Public License 2.0
+   https://letsencrypt.org/
+
+This product is licensed under the Apache License, Version 2.0.
+See the LICENSE file for the full license text.

@@ -6,7 +6,6 @@
 #define MQTT_PORT 8883  // SSL port
 #define MQTT_USERNAME "your-mqtt-username"
 #define MQTT_PASSWORD "your-mqtt-password"
-// Project settings
 #define PROJECT_ID "my-iot-project"
 #define USER_ID "user123"
 #define DEVICE_ID "esp32-device-001"

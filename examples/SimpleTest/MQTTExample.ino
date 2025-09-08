@@ -1,10 +1,6 @@
 #include <DecentIoT.h>
 #include <WiFi.h>
 
-// WiFi credentials
-#define WIFI_SSID "your-wifi-ssid"
-#define WIFI_PASS "your-wifi-password"
-
 // MQTT Broker settings (using HiveMQ Cloud as example)
 #define MQTT_BROKER "your-broker.hivemq.cloud"
 #define MQTT_PORT 8883  // SSL port
@@ -14,15 +10,18 @@
 #define PROJECT_ID "my-iot-project"
 #define USER_ID "user123"
 #define DEVICE_ID "esp32-device-001"
+// WiFi credentials
+#define WIFI_SSID "your-wifi-ssid"
+#define WIFI_PASS "your-wifi-password"
 
 // Pin definitions
-const int LED_PIN = 2;
-const int TEMP_SENSOR = 36; // ADC1_CH0 on ESP32
+#define LED_PIN D6  
+#define TEMP_SENSOR 36 // ADC1_CH0 on ESP32
 
 // LED state handler
 DECENTIOT_RECEIVE(P0)
 {
-  digitalWrite(ledPin, value);
+  digitalWrite(LED_PIN, value);
   Serial.printf("[P0] LED state = %s\n", value ? "ON" : "OFF");
 }
 

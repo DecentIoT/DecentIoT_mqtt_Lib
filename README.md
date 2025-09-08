@@ -1,131 +1,90 @@
 # DecentIoT MQTT Library
 
-A secure and powerful MQTT library for IoT devices with built-in SSL/TLS certificate support. DecentIoT provides a simple way to connect IoT devices to MQTT brokers with automatic security validation, making it safe for production use in real-world projects.
+A revolutionary IoT platform that combines a powerful Arduino library with a professional web dashboard. DecentIoT gives you the best of both worlds: **beautiful dashboards like existing platforms** + **complete control with your own MQTT broker**.
+
+## 🚀 What Makes DecentIoT Special?
+
+**DecentIoT** is a **complete IoT platform** that combines:
+- 🌐 **Professional Web Dashboard** - Create beautiful dashboards with widgets
+- 🔧 **Your Own Cloud** - Use your own MQTT broker (HiveMQ, AWS IoT, etc.)
+- 📱 **Smart Arduino Library** - This library that connects everything
+
+**No more vendor lock-in!** Use your own infrastructure while getting a professional dashboard experience.
 
 ## Features
 
-- 🔒 **Built-in SSL/TLS Security** - Automatic certificate validation for secure connections
-- 🔒 **SSL/TLS Support** - MQTT over SSL/TLS (port 8883)
-- 📡 **Real-time Communication** - Bi-directional data exchange
-- 🛠️ **Type-Safe Callbacks** - Automatic data type conversion
-- 📊 **JSON Support** - Built-in JSON parsing and creation
-- ⚡ **Optimized for ESP32/ESP8266** - Efficient memory usage
-- 🔄 **Production Ready** - Safe for real-world IoT deployments
-- 🚫 **No Certificate Bypass** - Security cannot be disabled
+- 🎯 **Virtual Pin Architecture** - P0, P1, P2, P3... represent virtual pins that map to your web dashboard widgets
+- 🔒 **Your Own Cloud** - Connect to your own MQTT broker (HiveMQ, AWS IoT, etc.)
+- 🌐 **Professional Dashboard** - Create beautiful, interactive dashboards with your own backend
+- ⚡ **Easy to Use** - Simple macros and intuitive API design
+- 🔄 **Real-time Communication** - Bidirectional data flow between device and cloud
+- 🛠️ **Production Ready** - Robust, reliable, and well-tested
+- 💰 **Cost Effective** - No subscription fees, use your own infrastructure
+- 🔒 **Secure by Default** - Uses MQTT over SSL/TLS (port 8883) for encrypted communication
 
 ## How It Works
 
-1. Connect to your MQTT broker with SSL/TLS (port 8883)
-2. Register callbacks for incoming messages
-3. Send data to specific topics
-4. The library handles all security and connection management
-5. Automatic certificate validation ensures secure communication
+```
+Physical Device          Virtual Pins          Web Dashboard
+     ↓                       ↓                      ↓
+  D6 (LED)    ←→    P0 (Virtual)    ←→    Button Widget
+  A0 (Sensor) ←→    P1 (Virtual)    ←→    Gauge Widget
+  A1 (Sensor) ←→    P2 (Virtual)    ←→    Chart Widget
+```
+
+1. **Set up your MQTT broker** (HiveMQ, AWS IoT, etc.)
+2. **Create DecentIoT web dashboard** with widgets
+3. **Map widgets to virtual pins** (P0, P1, P2, etc.)
+4. **Use this library** to connect your device
+5. **Send/receive data** through virtual pins
 
 ## Installation
 
+### Arduino Library Manager (Recommended)
+1. Open Arduino IDE
+2. Go to **Sketch → Include Library → Manage Libraries**
+3. Search for **"DecentIoT MQTT"**
+4. Click **Install** (dependencies are automatically installed)
+
+### Manual Installation
 1. Download the latest release from GitHub
-2. In Arduino IDE: Sketch -> Include Library -> Add .ZIP Library
+2. In Arduino IDE: **Sketch → Include Library → Add .ZIP Library**
 3. Select the downloaded zip file
+4. **Manually install dependencies**:
+   - `PubSubClient` by Nick O'Leary
+   - `ArduinoJson` by Benoit Blanchon (version 6.0.0 or higher)
 
 ## Security Features
 
-🔒 **SSL/TLS Certificate Validation**: The library includes a Let's Encrypt root certificate that automatically validates MQTT broker certificates.
-
-🔒 **SSL/TLS Support**: Supports MQTT over SSL/TLS (port 8883) for secure IoT device communication.
-
-🔒 **No Certificate Bypass**: Unlike some libraries, DecentIoT enforces certificate validation - security cannot be disabled.
-
-🔒 **Production Ready**: Safe for real-world IoT deployments where security is critical.
+🔒 **SSL/TLS Support**: Uses MQTT over SSL/TLS (port 8883) for encrypted communication  
+🔒 **Your Own Infrastructure**: Data stays on your servers, not third-party platforms  
+🔒 **Production Ready**: Safe for real-world IoT deployments  
+🔒 **No Vendor Lock-in**: Complete control over your data and infrastructure  
 
 For detailed security information, see [SECURITY.md](SECURITY.md).
 
 ## Quick Start
 
-Here's a simple example showing secure MQTT communication:
+1. **Set up your MQTT broker** (HiveMQ, AWS IoT, etc.)
+2. **Create DecentIoT web dashboard** with widgets
+3. **Install this library** and connect your device
+4. **Map virtual pins** (P0, P1, P2...) to dashboard widgets
 
-```cpp
-#include <DecentIoT.h>
-#include <WiFi.h>
+**Ready to get started?** Check out our comprehensive guides:
 
-// WiFi and MQTT credentials
-#define WIFI_SSID "your-wifi-ssid"
-#define WIFI_PASS "your-wifi-password"
-#define MQTT_BROKER "broker.hivemq.cloud"
-#define MQTT_PORT 8883  // SSL port
-#define MQTT_USER "your-username"
-#define MQTT_PASS "your-password"
-
-const int LED_PIN = 2;
-
-void setup() {
-    Serial.begin(115200);
-    pinMode(LED_PIN, OUTPUT);
-    
-    // Connect to WiFi
-    WiFi.begin(WIFI_SSID, WIFI_PASS);
-    while (WiFi.status() != WL_CONNECTED) {
-        delay(500);
-        Serial.print(".");
-    }
-    
-    // Initialize with SSL/TLS (certificate automatically used)
-    DecentIoT.begin("project-id", "user-id", "device-id", 
-                   MQTT_BROKER, MQTT_PORT, MQTT_USER, MQTT_PASS);
-    
-    // Register callback for LED control
-    DecentIoT.onReceive("led", [](const DecentIoTValue& value) {
-        bool ledState = value; // Automatic type conversion
-        digitalWrite(LED_PIN, ledState);
-        Serial.printf("LED: %s\n", ledState ? "ON" : "OFF");
-    });
-    
-    // Send temperature data
-    DecentIoT.onSend("temperature", []() {
-        float temp = readTemperature();
-        DecentIoT.write("temperature", temp);
-    });
-}
-
-void loop() {
-    DecentIoT.run(); // Handle MQTT operations
-    delay(100);
-}
-
-float readTemperature() {
-    // Your sensor code here
-    return 25.0 + random(-5, 5);
-}
-```
-
-
-## Detailed Usage
-
-### Initialization
-
-```cpp
-// Basic initialization
-OpenIoT.begin(FIREBASE_URL, FIREBASE_AUTH, WIFI_SSID, WIFI_PASS);
-
-// With additional options
-OpenIoTConfig config;
-config.deviceId = "unique-device-id";
-config.updateInterval = 100;  // Update interval in ms
-OpenIoT.begin(FIREBASE_URL, FIREBASE_AUTH, WIFI_SSID, WIFI_PASS, config);
-```
-
-### Path Callbacks
+- 📋 **[Complete Introduction Guide](guide/Introduction.md)** - Everything you need to know
+- ⏰ **[Scheduling System Guide](guide/ScheduleGuidelines.md)** - Advanced features
+- 🔧 **[Code Examples](examples/)** - Ready-to-use examples
 
 ## Examples
 
-The library comes with several examples:
+The library comes with several ready-to-use examples:
 
-1. **Basic LED Control**: Control an LED through Firebase
-2. **Sensor Monitoring**: Upload sensor data to Firebase
-3. **RGB LED Control**: Control RGB LED with JSON data
-4. **Multiple Devices**: Manage multiple devices
-5. **Secure Communication**: Implementation with security best practices
+1. **SimpleLED**: Basic LED control with virtual pins
+2. **SensorExample**: DHT sensor with temperature/humidity  
+3. **SecureMQTTExample**: Complete MQTT setup example
 
-Check the `examples` folder for complete code.
+**📁 [View all examples](examples/)** - Copy, paste, and customize for your project
 
 ## Supported Hardware
 
@@ -135,8 +94,12 @@ Check the `examples` folder for complete code.
 
 ## Dependencies
 
-- ArduinoJson (>= 6.0.0)
-- WiFi library for your board
+- `PubSubClient` - MQTT client functionality
+- `ArduinoJson` (>=6.0.0) - JSON data handling
+
+**Installation:**
+- **Arduino Library Manager**: Dependencies are automatically installed ✅
+- **Install from ZIP**: Dependencies are NOT automatically installed ❌
 
 ## Contributing
 
@@ -144,18 +107,32 @@ We welcome contributions! Please feel free to submit a Pull Request.
 
 ## License
 
-This project is licensed under the MIT License - see the LICENSE file for details.
+This project is licensed under the Apache License 2.0 - see the [LICENSE](LICENSE) file for details.
+
+## Documentation
+
+- 📋 **[Introduction Guide](guide/Introduction.md)** - Complete getting started guide
+- ⏰ **[Scheduling Guide](guide/ScheduleGuidelines.md)** - Advanced scheduling system
+- 🔧 **Examples** - Ready-to-use code examples
 
 ## Support
 
 - Create an issue on GitHub
-- Join our Discord community
-- Check out our documentation website
+- Check out our documentation guides
+- Join our community discussions
 
 ## Acknowledgments
 
 - Built for the IoT community
-- Special thanks to all contributors
+- Special thanks to the open-source community for the amazing libraries that make this project possible
+
+### Third-Party Libraries
+This library uses the following open-source libraries:
+- **PubSubClient** by Nick O'Leary (MIT License) - MQTT client functionality
+- **ArduinoJson** by Benoit Blanchon (MIT License) - JSON data handling
+- **ESP8266/ESP32 WiFi Libraries** by Espressif (LGPL v2.1) - WiFi connectivity
+
+**Contributors are welcome!** If you'd like to contribute to DecentIoT, please feel free to submit issues, feature requests, or pull requests.
 
 ---
 
