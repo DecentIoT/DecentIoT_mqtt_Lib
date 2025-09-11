@@ -106,13 +106,16 @@ void DecentIoTClass::onSend(const char *pin, SendCallback callback)
 
 String DecentIoTClass::_getTopic(const char *pin) const
 {
-    return _projectId + "/users/" + _userId + "/datastreams/" + _deviceId + "/" + pin;
+    return _projectId + "/users/" + _userId + "/datastreams/" + _deviceId + "/" + pin + "/value";
 }
 
 void DecentIoTClass::_handleMessage(const char *topic, const uint8_t *payload, unsigned int length)
 {
     String topicStr(topic);
-    String pin = topicStr.substring(topicStr.lastIndexOf('/') + 1);
+    //String pin = topicStr.substring(topicStr.lastIndexOf('/') + 1); // if not upto value
+    int lastSlash = topicStr.lastIndexOf('/');
+    int secondLastSlash = topicStr.lastIndexOf('/', lastSlash - 1);
+    String pin = topicStr.substring(secondLastSlash + 1, lastSlash);
     String message;
     for (unsigned int i = 0; i < length; ++i)
         message += (char)payload[i];
