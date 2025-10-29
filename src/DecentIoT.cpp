@@ -351,14 +351,14 @@ void DecentIoTClass::_subscribeAllPubSub()
 void DecentIoTClass::_publishDeviceStatus(bool online) {
     String topic = _projectId + "/users/" + _userId + "/datastreams/" + _deviceId + "/status";
     
-    // Use proper time sync like Firebase library
+    // Send just the timestamp - presence indicates online status
     time_t unixTimestamp = time(nullptr);
-    String payload = "{\"s\":" + String(online ? 1 : 0) + ",\"t\":" + String((unsigned long)unixTimestamp) + "}";
+    String payload = String((unsigned long)unixTimestamp);
     
     // Use retained message so broker always has latest status
     if (_pubsub.connected()) {
         _pubsub.publish(topic.c_str(), payload.c_str(), true); // true = retained
-        // Serial.printf("[STATUS] Device status updated: s=%d, t=%lu (%s)\n", 
-        //              online ? 1 : 0, (unsigned long)unixTimestamp, ctime(&unixTimestamp));
+        // Serial.printf("[STATUS] Device status updated: %lu (%s)\n", 
+        //              (unsigned long)unixTimestamp, ctime(&unixTimestamp));
     }
 }
