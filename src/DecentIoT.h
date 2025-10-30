@@ -190,7 +190,14 @@ private:
     bool isNumericString(const String &str);
     unsigned long _lastStatusUpdate = 0;
     const unsigned long _statusUpdateInterval = 30000; // 30 seconds
+    unsigned long _lastReconnectAttempt = 0;
+    const unsigned long _reconnectInterval = 5000; // 5 seconds between reconnection attempts
+    unsigned long _lastConnectionCheck = 0;
+    const unsigned long _connectionCheckInterval = 10000; // Check connection every 10 seconds
+    bool _wasWiFiConnected = false; // Track WiFi state to detect reconnections
     void _publishDeviceStatus(bool online);
+    void handleReconnection();
+    bool reconnectMQTT();
 };
 
 extern DecentIoTClass DecentIoT;

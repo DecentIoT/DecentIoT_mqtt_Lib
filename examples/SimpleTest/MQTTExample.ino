@@ -87,14 +87,16 @@ void setup()
 
 void loop()
 {
-  // User checks WiFi and reconnects if needed
+  // Handle WiFi reconnection (user's responsibility)
   if (WiFi.status() != WL_CONNECTED)
   {
     digitalWrite(LED_BUILTIN, LOW);
     Serial.println("[WiFi] Disconnected! Reconnecting...");
-    WiFi.disconnect();
-    WiFi.begin(WIFI_SSID, WIFI_PASS);
-    // Optionally: wait for connection, show status, etc.
+    
+    // Use WiFi.reconnect() for faster reconnection
+    WiFi.reconnect();
+    
+    // Wait for connection with timeout
     int attempts = 0;
     while (WiFi.status() != WL_CONNECTED && attempts < 20)
     {
@@ -103,14 +105,21 @@ void loop()
       digitalWrite(LED_BUILTIN, !digitalRead(LED_BUILTIN));
       attempts++;
     }
+    
     if (WiFi.status() == WL_CONNECTED)
     {
-      Serial.println("WiFi reconnected! Restarting device...");
-      delay(1000);
-      ESP.restart();
+      Serial.println("\n[WiFi] Reconnected successfully!");
+      digitalWrite(LED_BUILTIN, HIGH);
+      // Library will automatically detect WiFi reconnection and reconnect MQTT
+    }
+    else
+    {
+      Serial.println("\n[WiFi] Reconnection failed, will retry...");
     }
   }
 
+  // Library automatically handles MQTT reconnection when WiFi comes back
   DecentIoT.run();
+  
   delay(10);
 }

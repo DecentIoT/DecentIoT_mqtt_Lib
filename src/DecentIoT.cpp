@@ -72,7 +72,8 @@ void DecentIoTClass::begin(const char *mqttBroker, int mqttPort, const char *mqt
     _client.setCACert(root_ca);
 #endif
     
-    // Set up PubSubClient
+    // Set up PubSubClient with larger buffer for reliability
+    _pubsub.setBufferSize(512); // Increase from default 256 bytes
     _pubsub.setServer(_broker.c_str(), _port);
     _pubsub.setCallback([this](char* topic, byte* payload, unsigned int length) {
         _handleMessage(topic, payload, length);
@@ -82,13 +83,18 @@ void DecentIoTClass::begin(const char *mqttBroker, int mqttPort, const char *mqt
     
     // Try to connect with proper error handling
     Serial.println("🔗 Connecting to MQTT broker via TLS...");
+    Serial.printf("[DecentIoT] Client ID: %s\n", clientId.c_str());
     
     if (_pubsub.connect(clientId.c_str(), _username.c_str(), _password.c_str())) {
         Serial.println("✅ MQTT TLS connection successful");
         _subscribeAllPubSub();
         _publishDeviceStatus(true); // true = online
+        _wasWiFiConnected = true; // Mark WiFi as connected after successful MQTT connection
     } else {
         Serial.println("❌ MQTT TLS connection failed");
+        Serial.printf("[DecentIoT] Connection state: %d\n", _pubsub.state());
+        Serial.println("[DecentIoT] State codes: -4=timeout, -3=lost, -2=failed, -1=disconnected");
+        Serial.println("[DecentIoT] 1=bad protocol, 2=bad client ID, 3=unavailable, 4=bad credentials, 5=unauthorized");
     }
 }
 
@@ -221,12 +227,57 @@ void DecentIoTClass::publishStatus(const char *status)
 
 void DecentIoTClass::run()
 {
+    unsigned long currentMillis = millis();
+    bool wifiCurrentlyConnected = (WiFi.status() == WL_CONNECTED);
+    
+    // 1. If WiFi is down, can't do anything
+    if (!wifiCurrentlyConnected)
+    {
+        if (_wasWiFiConnected)
+        {
+            _wasWiFiConnected = false;
+            _pubsub.disconnect();
+        }
+        return;
+    }
+    
+    // 2. WiFi is connected - check if we need to handle reconnection
+    if (!_wasWiFiConnected)
+    {
+        // WiFi just came back online - force MQTT reconnection
+        Serial.println("[DecentIoT] WiFi reconnected, attempting MQTT reconnection...");
+        _wasWiFiConnected = true;
+        _lastReconnectAttempt = 0;
+        
+        delay(2000); // Wait for network stability
+        
+        if (reconnectMQTT())
+        {
+            Serial.println("[DecentIoT] MQTT reconnected successfully");
+            _subscribeAllPubSub();
+            _publishDeviceStatus(true);
+        }
+        return;
+    }
+    
+    // 3. WiFi is up and was up before - check MQTT connection
+    if (!_pubsub.connected())
+    {
+        handleReconnection();
+        return;
+    }
+    
+    // 4. Everything is connected - process MQTT messages
     _pubsub.loop();
+    
+    // 5. Continue normal operations
     processScheduledTasks();
-    unsigned long now = millis();
-    if (now - _lastStatusUpdate > _statusUpdateInterval) {
-        _publishDeviceStatus(true); // true = online
-        _lastStatusUpdate = now;
+    
+    // 6. Update device status periodically
+    if (currentMillis - _lastStatusUpdate >= _statusUpdateInterval)
+    {
+        _publishDeviceStatus(true);
+        _lastStatusUpdate = currentMillis;
     }
 }
 
@@ -361,4 +412,80 @@ void DecentIoTClass::_publishDeviceStatus(bool online) {
         // Serial.printf("[STATUS] Device status updated: %lu (%s)\n", 
         //              (unsigned long)unixTimestamp, ctime(&unixTimestamp));
     }
+}
+
+void DecentIoTClass::handleReconnection()
+{
+    unsigned long currentMillis = millis();
+    
+    // Check if WiFi is connected first
+    if (WiFi.status() != WL_CONNECTED)
+    {
+        return;
+    }
+    
+    // Throttle reconnection attempts
+    if (currentMillis - _lastReconnectAttempt < _reconnectInterval)
+    {
+        return;
+    }
+    
+    _lastReconnectAttempt = currentMillis;
+    
+    // Try to reconnect (silent unless it succeeds or fails badly)
+    if (reconnectMQTT())
+    {
+        Serial.println("[DecentIoT] MQTT reconnected");
+        _subscribeAllPubSub();
+        _publishDeviceStatus(true);
+    }
+}
+
+bool DecentIoTClass::reconnectMQTT()
+{
+    // Clean disconnect and stop client
+    _pubsub.disconnect();
+    _client.stop();
+    delay(1000);
+    
+    // Verify time is synchronized (critical for SSL/TLS)
+    time_t now = time(nullptr);
+    if (now < 24 * 3600)
+    {
+        configTime(0, 0, "pool.ntp.org", "time.nist.gov");
+        int retry = 0;
+        while (now < 24 * 3600 && retry < 15)
+        {
+            delay(500);
+            now = time(nullptr);
+            retry++;
+        }
+        if (now < 24 * 3600)
+        {
+            Serial.println("[DecentIoT] WARNING: Time sync failed");
+        }
+    }
+    
+    // Reinitialize SSL/TLS
+#ifdef ESP8266
+    if (_cert != nullptr)
+    {
+        _client.setTrustAnchors(_cert);
+    }
+    _client.setInsecure();
+#elif defined(ESP32)
+    _client.setCACert(root_ca);
+#endif
+    
+    // Reinitialize PubSubClient
+    _pubsub.setClient(_client);
+    _pubsub.setBufferSize(512);
+    _pubsub.setServer(_broker.c_str(), _port);
+    _pubsub.setCallback([this](char* topic, byte* payload, unsigned int length) {
+        _handleMessage(topic, payload, length);
+    });
+    
+    // Try to connect
+    String clientId = "DecentIoT-" + String(random(0xffff), HEX);
+    return _pubsub.connect(clientId.c_str(), _username.c_str(), _password.c_str());
 }
