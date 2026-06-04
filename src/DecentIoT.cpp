@@ -16,7 +16,6 @@
 */
 
 #include "DecentIoT.h"
-#include <ArduinoJson.h>
 #include "mqtt_root_ca.h"
 #include <time.h>  // Add this for time functions
 
@@ -210,6 +209,262 @@ void DecentIoTClass::write(const char *pin, const char *value)
     {
         Serial.println("⚠️  MQTT not connected, skipping message");
     }
+}
+
+// ====================================================================
+// DecentIoTGps: Zero-RAM NMEA GPS Parser Implementation
+// ====================================================================
+
+DecentIoTGps::DecentIoTGps() : _index(0), _hasFix(false), _latitude(0.0f), _longitude(0.0f), _altitude(NAN), _speed(NAN), _time("") {}
+
+bool DecentIoTGps::encode(char c)
+{
+    if (c == '$')
+    {
+        _index = 0;
+        _buffer[_index++] = c;
+        return false;
+    }
+    
+    if (_index == 0)
+    {
+        return false; // Waiting for start character '$'
+    }
+    
+    if (c == '\r' || c == '\n')
+    {
+        if (_index > 0)
+        {
+            _buffer[_index] = '\0';
+            _index = 0;
+            // Check if sentence matches $--RMC (character 3, 4, 5 are 'R', 'M', 'C')
+            if (strlen(_buffer) > 6 && _buffer[3] == 'R' && _buffer[4] == 'M' && _buffer[5] == 'C')
+            {
+                if (checkChecksum(_buffer))
+                {
+                    parseRMC(_buffer);
+                    return true;
+                }
+            }
+        }
+        _index = 0;
+        return false;
+    }
+    
+    if (_index < sizeof(_buffer) - 1)
+    {
+        _buffer[_index++] = c;
+    }
+    else
+    {
+        _index = 0; // Overflow, reset
+    }
+    return false;
+}
+
+bool DecentIoTGps::checkChecksum(const char *sentence)
+{
+    const char *star = strchr(sentence, '*');
+    if (!star)
+    {
+        return true; // Lenient if no checksum field
+    }
+    
+    uint8_t calculated = 0;
+    for (const char *p = sentence + 1; p < star; ++p)
+    {
+        calculated ^= *p;
+    }
+    
+    char hex[3];
+    hex[0] = star[1];
+    hex[1] = star[2];
+    hex[2] = '\0';
+    uint8_t received = (uint8_t)strtol(hex, nullptr, 16);
+    
+    return calculated == received;
+}
+
+const char *DecentIoTGps::getField(const char *str, int fieldIndex, char *fieldBuffer, int maxLen)
+{
+    int currentField = 0;
+    const char *p = str;
+    
+    while (*p && currentField < fieldIndex)
+    {
+        if (*p == ',')
+        {
+            currentField++;
+        }
+        p++;
+    }
+    
+    if (currentField != fieldIndex)
+    {
+        fieldBuffer[0] = '\0';
+        return nullptr;
+    }
+    
+    int i = 0;
+    while (*p && *p != ',' && *p != '*' && i < maxLen - 1)
+    {
+        fieldBuffer[i++] = *p++;
+    }
+    fieldBuffer[i] = '\0';
+    return fieldBuffer;
+}
+
+float DecentIoTGps::parseDegree(const char *val, char dir)
+{
+    float raw = atof(val);
+    int degrees = (int)(raw / 100);
+    float minutes = raw - (degrees * 100);
+    float decimal = degrees + (minutes / 60.0f);
+    
+    if (dir == 'S' || dir == 'W')
+    {
+        decimal = -decimal;
+    }
+    return decimal;
+}
+
+void DecentIoTGps::parseRMC(char *sentence)
+{
+    char field[32];
+    
+    // Field 2: Status (A = Active/Valid, V = Warning/Invalid)
+    if (!getField(sentence, 2, field, sizeof(field)) || field[0] != 'A')
+    {
+        _hasFix = false;
+        return;
+    }
+    
+    // Field 1: UTC Time (hhmmss.sss)
+    if (getField(sentence, 1, field, sizeof(field)) && strlen(field) >= 6)
+    {
+        char timeStr[7];
+        strncpy(timeStr, field, 6);
+        timeStr[6] = '\0';
+        _time = String(timeStr);
+    }
+    
+    char latField[32];
+    char latDir[2];
+    char lonField[32];
+    char lonDir[2];
+    
+    bool hasLat = getField(sentence, 3, latField, sizeof(latField)) &&
+                  getField(sentence, 4, latDir, sizeof(latDir)) &&
+                  strlen(latField) > 0 && strlen(latDir) > 0;
+                  
+    bool hasLon = getField(sentence, 5, lonField, sizeof(lonField)) &&
+                  getField(sentence, 6, lonDir, sizeof(lonDir)) &&
+                  strlen(lonField) > 0 && strlen(lonDir) > 0;
+                  
+    if (hasLat && hasLon)
+    {
+        _latitude = parseDegree(latField, latDir[0]);
+        _longitude = parseDegree(lonField, lonDir[0]);
+        _hasFix = true;
+    }
+    else
+    {
+        _hasFix = false;
+    }
+    
+    // Field 7: Speed in knots
+    if (getField(sentence, 7, field, sizeof(field)) && strlen(field) > 0)
+    {
+        float speedKnots = atof(field);
+        _speed = speedKnots * 1.852f; // convert knots to km/h
+    }
+    else
+    {
+        _speed = NAN;
+    }
+    
+    _altitude = NAN;
+}
+
+// ====================================================================
+// DecentIoTClass: GPS Implementation Overloads
+// ====================================================================
+
+void DecentIoTClass::feedGPS(char c)
+{
+    gps.encode(c);
+}
+
+void DecentIoTClass::writeGPS(const char *pin)
+{
+    if (!gps.hasFix())
+    {
+        Serial.println("⚠️  No GPS fix, skipping GPS message");
+        return;
+    }
+
+    String timeStr = gps.time();
+    String payload = String(gps.latitude(), 6) + "|" +
+                     String(gps.longitude(), 6) + "|" +
+                     (isnan(gps.altitude()) ? "" : String(gps.altitude(), 1)) + "|" +
+                     (isnan(gps.speed()) ? "" : String(gps.speed(), 2)) + "|" +
+                     timeStr;
+
+    String topic = _getTopic(pin);
+    if (_pubsub.connected())
+    {
+        _pubsub.publish(topic.c_str(), payload.c_str(), true);
+        Serial.printf("[GPS] Sent native location: %s\n", payload.c_str());
+    }
+    else
+    {
+        Serial.println("⚠️  MQTT not connected, skipping GPS message");
+    }
+}
+
+void DecentIoTClass::writeGPS(const char *pin, const GPSData &gpsData)
+{
+    if (!gpsData.isValid())
+    {
+        Serial.println("⚠️  Invalid GPS data, skipping GPS message");
+        return;
+    }
+
+    time_t ts = gpsData.timestamp > 0 ? gpsData.timestamp : time(nullptr);
+    struct tm *timeinfo = gmtime(&ts);
+    char timeBuf[7];
+    if (timeinfo)
+    {
+        sprintf(timeBuf, "%02d%02d%02d", timeinfo->tm_hour, timeinfo->tm_min, timeinfo->tm_sec);
+    }
+    else
+    {
+        strcpy(timeBuf, "000000");
+    }
+
+    String payload = String(gpsData.latitude, 6) + "|" +
+                     String(gpsData.longitude, 6) + "|" +
+                     (isnan(gpsData.altitude) ? "" : String(gpsData.altitude, 1)) + "|" +
+                     (isnan(gpsData.speed) ? "" : String(gpsData.speed, 2)) + "|" +
+                     String(timeBuf);
+
+    String topic = _getTopic(pin);
+    if (_pubsub.connected())
+    {
+        _pubsub.publish(topic.c_str(), payload.c_str(), true);
+        Serial.printf("[GPS] Sent struct location: %s\n", payload.c_str());
+    }
+    else
+    {
+        Serial.println("⚠️  MQTT not connected, skipping GPS message");
+    }
+}
+
+void DecentIoTClass::writeGPS(const char *pin, float latitude, float longitude,
+                              float altitude, float speed, float accuracy)
+{
+    GPSData gpsData(latitude, longitude, altitude, speed, accuracy);
+    writeGPS(pin, gpsData);
 }
 
 void DecentIoTClass::publishStatus(const char *status)

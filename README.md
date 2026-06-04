@@ -14,6 +14,7 @@ A revolutionary IoT platform that combines a powerful Arduino library with a pro
 ## Features
 
 - 🎯 **Virtual Pin Architecture** - P0, P1, P2, P3... represent virtual pins that map to your web dashboard widgets
+- 🗺️ **GPS/Map Integration** - Send GPS location data as pipe‑delimited strings for map widgets (the library serializes to the required format).
 - 🔒 **Your Own Cloud** - Connect to your own MQTT broker (HiveMQ, AWS IoT, etc.)
 - 🌐 **Professional Dashboard** - Create beautiful, interactive dashboards with your own backend
 - ⚡ **Easy to Use** - Simple macros and intuitive API design
@@ -52,7 +53,6 @@ Physical Device          Virtual Pins          Web Dashboard
 3. Select the downloaded zip file
 4. **Manually install dependencies**:
    - `PubSubClient` by Nick O'Leary
-   - `ArduinoJson` by Benoit Blanchon (version 6.0.0 or higher)
 
 ## Security Features
 
@@ -76,13 +76,51 @@ For detailed security information, see [SECURITY.md](SECURITY.md).
 - ⏰ **[Scheduling System Guide](guide/ScheduleGuidelines.md)** - Advanced features
 - 🔧 **[Code Examples](examples/)** - Ready-to-use examples
 
+## GPS/Map Integration
+
+DecentIoT supports GPS tracking with automatic JSON serialization for map widgets:
+
+```cpp
+// Send GPS data automatically every 10 seconds (Dashboard integration)
+DECENTIOT_SEND(P0, 10000) {
+    // Feed incoming NMEA characters from your GPS serial (e.g., SoftwareSerial gpsSerial)
+    while (gpsSerial.available()) {
+        DecentIoT.feedGPS(gpsSerial.read());
+    }
+
+    if (DecentIoT.gps.hasFix()) {
+        // Publish current GPS state on virtual pin P0
+        DecentIoT.writeGPS(P0);
+    } else {
+        Serial.println("[GPS] Waiting for satellite fix...");
+    }
+}
+
+// Manual GPS sending (using custom values or a GPSData struct)
+DecentIoT.writeGPS(P0, latitude, longitude, altitude, speed, accuracy);
+```
+
+**GPS Data Structure:**
+```json
+{
+  "latitude": 40.7128,
+  "longitude": -74.0060,
+  "altitude": 15.5,
+  "speed": 45.2,
+  "accuracy": 5.0,
+  "timestamp": 1704067200
+}
+```
+
 ## Examples
 
 The library comes with several ready-to-use examples:
 
 1. **SimpleLED**: Basic LED control with virtual pins
-2. **SensorExample**: DHT sensor with temperature/humidity  
+2. **SensorExample**: DHT sensor with temperature/humidity
 3. **SecureMQTTExample**: Complete MQTT setup example
+4. **GPSExample**: GPS tracking with TinyGPSPlus integration
+5. **SimpleGPSExample**: Basic GPS sending without external libraries
 
 **📁 [View all examples](examples/)** - Copy, paste, and customize for your project
 
@@ -95,7 +133,6 @@ The library comes with several ready-to-use examples:
 ## Dependencies
 
 - `PubSubClient` - MQTT client functionality
-- `ArduinoJson` (>=6.0.0) - JSON data handling
 
 **Installation:**
 - **Arduino Library Manager**: Dependencies are automatically installed ✅
@@ -129,7 +166,7 @@ This project is licensed under the Apache License 2.0 - see the [LICENSE](LICENS
 ### Third-Party Libraries
 This library uses the following open-source libraries:
 - **PubSubClient** by Nick O'Leary (MIT License) - MQTT client functionality
-- **ArduinoJson** by Benoit Blanchon (MIT License) - JSON data handling
+
 - **ESP8266/ESP32 WiFi Libraries** by Espressif (LGPL v2.1) - WiFi connectivity
 
 **Contributors are welcome!** If you'd like to contribute to DecentIoT, please feel free to submit issues, feature requests, or pull requests.
