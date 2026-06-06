@@ -118,6 +118,67 @@ using ReceiveCallback = std::function<void(const DecentIoTValue &value)>;
 using SendCallback = std::function<void()>;
 using TaskCallback = std::function<void()>;
 
+// GPS Data Structure for Map Integration
+struct GPSData
+{
+    float latitude = 0.0f;
+    float longitude = 0.0f;
+    float altitude = NAN;     // Optional: altitude in meters
+    float speed = NAN;        // Optional: speed in km/h
+    float accuracy = NAN;     // Optional: accuracy in meters
+    time_t timestamp = 0;     // Optional: Unix timestamp
+
+    // Default constructor
+    GPSData() = default;
+
+    // Constructor with required fields
+    GPSData(float lat, float lng) : latitude(lat), longitude(lng) {}
+
+    // Constructor with all fields
+    GPSData(float lat, float lng, float alt, float spd, float acc)
+        : latitude(lat), longitude(lng), altitude(alt), speed(spd), accuracy(acc)
+    {
+        timestamp = time(nullptr);
+    }
+
+    // Check if GPS data is valid (has lat/lng)
+    bool isValid() const
+    {
+        return latitude >= -90.0f && latitude <= 90.0f &&
+               longitude >= -180.0f && longitude <= 180.0f;
+    }
+};
+
+// Zero-RAM NMEA GPS Parser
+class DecentIoTGps
+{
+private:
+    char _buffer[83];
+    uint8_t _index = 0;
+    bool _hasFix = false;
+    float _latitude = 0.0f;
+    float _longitude = 0.0f;
+    float _altitude = NAN;
+    float _speed = NAN;
+    String _time = "";
+
+    void parseRMC(char *sentence);
+    bool checkChecksum(const char *sentence);
+    float parseDegree(const char *val, char dir);
+    const char *getField(const char *str, int fieldIndex, char *fieldBuffer, int maxLen);
+
+public:
+    DecentIoTGps();
+    bool encode(char c);
+
+    bool hasFix() const { return _hasFix; }
+    float latitude() const { return _latitude; }
+    float longitude() const { return _longitude; }
+    float altitude() const { return _altitude; }
+    float speed() const { return _speed; } // speed in km/h
+    String time() const { return _time; }   // hhmmss UTC
+};
+
 struct ReceiveHandler
 {
     String id;
@@ -159,6 +220,8 @@ private:
 #endif
 
 public:
+    DecentIoTGps gps; // Public native GPS parser instance
+
     DecentIoTClass();
     ~DecentIoTClass(); // Add this line
     void begin(const char *mqttBroker, int mqttPort, const char *mqttUser, const char *mqttPass, const char *projectId, const char *userId, const char *deviceId);
@@ -169,6 +232,45 @@ public:
     void write(const char *pin, int value);
     void write(const char *pin, float value);
     void write(const char *pin, const char *value);
+
+    // Native GPS Module parsing & feeding
+    void feedGPS(char c);
+
+    // GPS/Map Data Methods - Send structured GPS data as pipe-delimited string
+    void writeGPS(const char *pin); // Send internal gps state
+    void writeGPS(const char *pin, const GPSData &gpsData);
+    void writeGPS(const char *pin, float latitude, float longitude,
+                  float altitude = NAN, float speed = NAN, float accuracy = NAN);
+
+    // GPS Module Helper Methods (require external libraries)
+    template<typename T>
+    void writeGPS_TinyGPSPlus(const char *pin, T& gps)
+    {
+        if (!gps.location.isValid())
+        {
+            Serial.println("⚠️  GPS location not valid, skipping GPS message");
+            return;
+        }
+
+        GPSData gpsData;
+        gpsData.latitude = gps.location.lat();
+        gpsData.longitude = gps.location.lng();
+
+        // Optional fields if available
+        if (gps.altitude.isValid())
+            gpsData.altitude = gps.altitude.meters();
+
+        if (gps.speed.isValid())
+            gpsData.speed = gps.speed.kmph();
+
+        if (gps.hdop.isValid())
+            gpsData.accuracy = gps.hdop.hdop() * 5.0f; // Rough accuracy estimate
+
+        gpsData.timestamp = time(nullptr);
+
+        writeGPS(pin, gpsData);
+    }
+
     void publishStatus(const char *status); // for heartbeat/status
     bool connected();
     void disconnect();
@@ -239,6 +341,32 @@ public:
         else
         {
             // If no interval, just register the callback
+            getDecentIoT().onSend(pin, cb);
+        }
+    }
+};
+
+// GPS Helper Macros for easy GPS data sending
+#define DECENTIOT_SEND_GPS(PIN_NAME, INTERVAL)                                                                 \
+    void DECENTIOT_SEND_GPS_HANDLER_##PIN_NAME();                                                             \
+    static DecentIoTGpsRegistrar _decentiot_gps_registrar_##PIN_NAME(#PIN_NAME, DECENTIOT_SEND_GPS_HANDLER_##PIN_NAME, INTERVAL); \
+    void DECENTIOT_SEND_GPS_HANDLER_##PIN_NAME()
+
+// GPS Registrar helper class
+class DecentIoTGpsRegistrar
+{
+public:
+    DecentIoTGpsRegistrar(const char *pin, TaskCallback cb, uint32_t interval = 0)
+    {
+        if (interval > 0)
+        {
+            // Schedule GPS data sending
+            String taskId = String("gps_") + pin;
+            getDecentIoT().schedule(taskId, interval, cb);
+        }
+        else
+        {
+            // Register callback (manual GPS sending)
             getDecentIoT().onSend(pin, cb);
         }
     }
