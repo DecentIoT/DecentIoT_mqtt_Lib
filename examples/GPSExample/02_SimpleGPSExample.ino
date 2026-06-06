@@ -52,15 +52,6 @@ DECENTIOT_SEND(P1, 15000)  // Every 15 seconds
                  location.latitude, location.longitude, location.altitude, location.speed);
 }
 
-// Manual GPS trigger (simulate button press)
-DECENTIOT_RECEIVE(P2)
-{
-    if (value) {
-        // Send current location immediately
-        DecentIoT.writeGPS(P0, currentLat, currentLng, 100.0, currentSpeed, currentAccuracy);
-        Serial.println("[GPS] Manual GPS update sent!");
-    }
-}
 
 void setup()
 {
@@ -77,8 +68,7 @@ void setup()
     Serial.println("\n[WiFi] Connected!");
 
     // Initialize DecentIoT
-    DecentIoT.begin(MQTT_BROKER, MQTT_PORT, MQTT_USERNAME, MQTT_PASSWORD,
-                   PROJECT_ID, USER_ID, DEVICE_ID);
+    DecentIoT.begin(MQTT_BROKER, MQTT_PORT, MQTT_USERNAME, MQTT_PASSWORD, PROJECT_ID, USER_ID, DEVICE_ID);
 
     Serial.println("[GPS] Simple GPS demo ready!");
     Serial.println("[GPS] Sending simulated GPS data every 10-15 seconds");
